@@ -1,0 +1,259 @@
+
+#Configuration Statements (Copy/Paste)
+
+enable
+mysecretpassword
+configure terminal
+no logging console
+
+hostname datacenter-switch-01
+
+ip domain-name EXAMPLE.COM
+ip name-server 192.168.0.6
+ip name-server 192.168.0.7
+
+clock timezone UTC 0
+
+ntp authentication-key 1 md5 65543
+ntp authenticate
+ntp trusted-key 1
+ntp server 192.168.8.18 key 1
+
+service password-encryption
+enable secret mysecretpassword
+username adm.network privilege 0 secret 0 mysecretpassword
+username admin privilege 15 secret 0 mysecretpassword
+
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+service linenumber
+service sequence-numbers
+logging facility local6
+logging buffered 64000 warnings
+logging 192.168.8.7
+
+no ip http server
+no ip http secure-server
+no ip source-route
+service tcp-keepalives-in
+
+ip tcp synwait-time 10
+
+#aaa new-model
+#aaa authentication login default group radius local
+#aaa authentication dot1x default group radius
+#aaa authorization exec default group radius local if-authenticated
+#aaa authorization network default group radius 
+#aaa authorization auth-proxy default group radius 
+#aaa accounting dot1x default start-stop group radius
+#aaa accounting exec default start-stop group radius
+#aaa accounting system default start-stop group radius
+#aaa accounting update periodic 5
+#aaa server radius dynamic-author
+#client 192.168.8.197 server-key mysecretpassword
+#client 192.168.0.8 server-key mysecretpassword
+#exit
+
+#radius-server attribute 6 on-for-login-auth
+#radius-server attribute 6 support-multiple
+#radius-server attribute 8 include-in-access-req
+#radius-server attribute 25 access-request include
+#radius-server dead-criteria time 5 tries 3
+#radius-server vsa send accounting
+#radius-server vsa send authentication
+
+#radius server radius
+#address ipv4 192.168.8.197 auth-port 1812 acct-port 1813
+#timeout 30
+#retransmit 3
+#key mysecretpassword
+#exit
+
+snmp-server user snmpadmin SNMPgroup v3 auth sha mysecretpassword priv aes 128 mysecretpassword
+snmp-server group SNMPgroup v3 auth read SNMPview access ipv4-network-management
+snmp-server view SNMPview internet included
+snmp-server view SNMPview mib-2 included
+snmp-server view SNMPview cisco included
+snmp-server view SNMPview system included
+snmp-server enable traps tty
+
+banner login ^
+ATTENTION!
+You are accessing a Cisco switch. Welcome!
+^
+
+vlan 999
+name No_Device
+exit
+
+crypto key generate rsa general-keys modulus 2048
+
+ip ssh time-out 60
+ip ssh version 2
+ip ssh authentication-retries 3
+
+VTP mode transparent
+
+spanning-tree mode rapid-pvst
+spanning-tree loopguard default
+udld aggressive
+
+
+
+interface Vlan180
+description Management
+ip address 192.168.8.4 255.255.255.0
+no shutdown
+exit
+
+ip default-gateway 192.168.8.1
+
+ntp source vlan 180
+logging source-interface vlan 180
+ip radius source-interface vlan 180
+snmp-server source-interface informs vlan 180
+snmp-server trap-source vlan 180
+
+line con 0
+exec-timeout 10
+logging synchronous
+exit
+
+line vty 0 15
+access-class ipv4-terminal-access in
+exec-timeout 10
+logging synchronous
+transport input ssh
+transport output none
+exit
+
+interface range Te1/0/1 - 48, Fo 1/1/1-4
+description "No_Device"
+switchport
+switchport mode access
+switchport access vlan 999
+shutdown
+exit
+
+interface Gig 0/0
+description "No_Device"
+no ip address
+shutdown
+exit
+
+vlan 161
+name SSIL1
+vlan 162
+name SSIL2
+vlan 180
+name Management
+vlan 181
+name Application
+vlan 183
+name Voice_Video1
+vlan 184
+name Miscellaneous1
+vlan 190
+name Embarkable
+vlan 192
+name Emb-misc
+vlan 193
+name RSPAN_External
+remote-span
+vlan 194
+name Emb-Wireless
+vlan 195
+name Wireless_AP
+vlan 198
+name Provisioning
+vlan 777
+name vSAN
+vlan 778
+name vMotion
+exit
+
+interface range Te1/0/20-40
+description Trunk to ESXi Host
+no switchport access vlan 999
+switchport mode trunk
+spanning-tree portfast trunk
+switchport trunk allowed vlan 161,162,180,181,182,183,190,193,194,198,777,778
+switchport nonegotiate
+no shutdown
+exit
+
+interface Fo 1/1/1
+description Trunk To BB1 (101) Fo1/1/1
+no switchport access vlan 999
+channel-group 31 mode active
+no shutdown
+exit
+
+interface Fo1/1/2
+description Trunk To BB2 (102) Fo2/1/1
+no switchport access vlan 999
+channel-group 31 mode active
+no shutdown
+exit
+
+interface Port-channel31
+description Port Channel To BB-RTR
+# deprecated command
+#switchport trunk encapsulation dot1q
+switchport mode trunk
+switchport trunk allowed vlan 161,162,180,181,182,183,184,190,193,194,195,198,777,778
+  no shutdown
+exit
+
+logging console 6
+end
+
+copy running-config startup-config
+!
+
+configure terminal
+
+no logging console
+
+ip access-list extended ipv4-terminal-access
+remark Allow VTY (SSH) access from MGMT VLAN
+permit tcp 192.168.8.0 0.0.0.255 any eq 22
+remark Allow VTY (SSH) access from APPL VLAN
+permit tcp 192.168.0.0 0.0.0.255 any eq 22
+remark Deny all other communication not already specified
+deny ip any any log
+exit
+
+ip access-list standard ipv4-network-management
+remark SNMP-Server Group Access STIG V-3021
+remark permit MTS
+permit 192.168.8.7
+remark permit DAVA01
+permit 192.168.8.10
+remark permit BU01
+permit 192.168.8.12
+remark permit VCM
+permit 192.168.8.14
+remark permit CM01
+permit 192.168.8.17
+remark permit AP02
+permit 192.168.8.18
+remark permit ISE
+permit 192.168.8.197
+permit 192.168.0.8
+remark Deny all other communication not already specified
+deny   any log
+exit
+
+logging console 6
+end
+
+copy running-config startup-config
+!
+
+
+
+
+
+
+
